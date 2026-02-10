@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AURA ZORKI</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json"> <meta name="theme-color" content="#0f0f14">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header>
+        <div class="header-content">
+            <h1>AURA ZORKI</h1>
+            <button id="install-btn" class="icon-btn" style="display: none;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            </button>
+        </div>
+        <p style="color: var(--gold-dim); font-size: 0.9em;">Система Визуального Декодирования</p>
+    </header>
+
+    <main>
+        <div id="scanner-container">
+            <video id="camera-feed" autoplay playsinline muted></video>
+            <canvas id="detection-canvas"></canvas> <div id="overlay-frame"></div>
+            <div id="loading-indicator">Загрузка нейросети...</div>
+        </div>
+
+        <button id="scan-btn" class="btn-gold" disabled>СКАНИРОВАТЬ</button>
+
+        <div id="result-area" class="tarot-card-display" style="display: none;">
+            <h2 id="card-name">...</h2>
+            <img id="card-image" src="" alt="Card">
+            <p id="card-short" class="meaning-short">...</p>
+        </div>
+    </main>
+
+    <script>
+        // Регистрация PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js');
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
