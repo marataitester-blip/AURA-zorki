@@ -1,7 +1,7 @@
 import tarotDatabase from './tarot_db.js';
 
 // --- НАСТРОЙКИ ---
-const CONFIDENCE_THRESHOLD = 0.40; // 40%
+const CONFIDENCE_THRESHOLD = 0.15; // Снизили до 15% (Сверхчувствительность)
 const MODEL_PATH = './best.onnx';
 const INPUT_SIZE = 1280; 
 
@@ -11,7 +11,6 @@ const screens = {
     camera: document.getElementById('screen-camera'),
     result: document.getElementById('screen-result')
 };
-
 const btnStart = document.getElementById('btn-start');
 const btnSnap = document.getElementById('btn-snap');
 const btnBack = document.getElementById('btn-back-cam');
@@ -50,7 +49,7 @@ btnStart.addEventListener('click', async () => {
             isModelReady = true;
             loadingMsg.style.display = 'none';
             btnSnap.disabled = false;
-        } catch (e) { loadingMsg.innerText = "Ошибка модели"; }
+        } catch (e) { loadingMsg.innerText = "Ошибка модели (404)"; }
     }
 });
 
@@ -60,7 +59,6 @@ btnSnap.addEventListener('click', async () => {
     btnSnap.style.transform = "scale(0.9)";
     setTimeout(() => btnSnap.style.transform = "scale(1)", 150);
 
-    // Подготовка канваса
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = INPUT_SIZE;
     tempCanvas.height = INPUT_SIZE;
@@ -73,32 +71,38 @@ btnSnap.addEventListener('click', async () => {
     ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, INPUT_SIZE, INPUT_SIZE);
 
     loadingMsg.style.display = 'block';
-    loadingMsg.innerText = "Смотрю...";
+    loadingMsg.innerText = "Анализ...";
 
-    // Пауза чтобы UI обновился
     setTimeout(async () => {
         try {
-            const detection = await runInference(ctx);
+            const result = await runInference(ctx);
             loadingMsg.style.display = 'none';
 
-            if (detection) {
-                showResult(detection.id);
+            if (result.found) {
+                showResult(result.id);
             } else {
-                alert("Ничего не вижу. Попробуй светлее.");
+                // Если не нашли уверенно, говорим что почти нашли
+                const cardName = getCardName(result.bestId);
+                alert(`Не уверен. Похоже на: ${cardName} (Вероятность: ${(result.score * 100).toFixed(0)}%).\nПопробуй ближе.`);
             }
         } catch (e) {
             console.error(e);
             loadingMsg.style.display = 'none';
+            alert("Ошибка вычислений: " + e.message);
         }
     }, 50);
 });
+
+function getCardName(id) {
+    const c = tarotDatabase.find(x => x.id === id);
+    return c ? c.name : `ID ${id}`;
+}
 
 // --- 3. НЕЙРОСЕТЬ ---
 async function runInference(ctx) {
     const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
     const float32Data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
     
-    // Нормализация
     for (let i = 0; i < float32Data.length; i++) {
         float32Data[i] = imageData.data[i * 4] / 255.0; 
     }
@@ -107,59 +111,47 @@ async function runInference(ctx) {
     const results = await model.run({ images: inputTensor });
     const output = results[Object.keys(results)[0]].data;
 
-    return parseYOLO_Brutal(output);
+    return parseYOLO_Sensitive(output);
 }
 
-// 🔥 ЖЕСТКИЙ ПАРСЕР (БЕЗ ГЕОМЕТРИИ) 🔥
-function parseYOLO_Brutal(data) {
+// 🔥 ЧУВСТВИТЕЛЬНЫЙ ПАРСЕР 🔥
+function parseYOLO_Sensitive(data) {
     const numAnchors = 8400; 
     const numClasses = 80;
     
-    // СМЕЩЕНИЕ: Пропускаем первые 4 строки (4 * 8400 элементов)
-    // Это X, Y, W, H. Мы их просто игнорируем.
-    const startOffset = 4 * numAnchors;
-    
-    let maxScore = 0;
-    let bestClassId = -1;
+    let globalMaxScore = 0;
+    let globalBestClass = -1;
 
-    // Проходим по всем "столбикам" (якорям)
+    // Ищем максимум по всему массиву классов
     for (let i = 0; i < numAnchors; i++) {
-        
-        // Внутри каждого якоря ищем победивший класс
         for (let c = 0; c < numClasses; c++) {
-            
-            // Индекс = (Смещение_классов + Номер_класса) * Ширина + Текущий_якорь
-            // Но в плоском массиве [Batch, Channel, Anchor] это:
-            // (4 + c) * 8400 + i
-            
+            // (4 строки геометрии пропускаем) + c
             const idx = (4 + c) * numAnchors + i;
             const score = data[idx];
 
-            if (score > maxScore) {
-                maxScore = score;
-                bestClassId = c;
+            if (score > globalMaxScore) {
+                globalMaxScore = score;
+                globalBestClass = c;
             }
         }
     }
 
-    console.log(`Max Score found: ${maxScore} for Class: ${bestClassId}`);
+    console.log(`ZORKI: Best guess ${globalBestClass} (${globalMaxScore})`);
 
-    // Если "Императрица" (ID 3) имеет score > 1.0, значит мы все еще читаем геометрию.
-    // Но с этим кодом это невозможно.
-    
-    if (maxScore > CONFIDENCE_THRESHOLD) {
-        return { id: bestClassId, score: maxScore };
-    }
-    return null;
+    // Возвращаем результат в любом случае, но ставим флаг found
+    return {
+        found: globalMaxScore > CONFIDENCE_THRESHOLD,
+        id: globalBestClass,
+        bestId: globalBestClass,
+        score: globalMaxScore
+    };
 }
 
-// --- 4. ПОКАЗАТЬ РЕЗУЛЬТАТ ---
+// --- 4. РЕЗУЛЬТАТ ---
 function showResult(id) {
     const card = tarotDatabase.find(c => c.id === id);
     if (card) {
-        // Если image путь не содержит слэш, добавляем папку
         const imgPath = card.img.includes('/') ? card.img : `./cards/${card.img}`;
-        
         resultImg.src = imgPath;
         resultTitle.innerText = card.name;
         resultDesc.innerText = card.short;
