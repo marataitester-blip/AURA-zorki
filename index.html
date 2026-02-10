@@ -3,67 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    
     <title>AURA ZORKI</title>
-    
     <link rel="stylesheet" href="style.css">
-    
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0f0f14">
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet">
-
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
 </head>
 <body>
 
-    <header>
-        <div class="header-content">
-            <h1>AURA ZORKI</h1>
-            
-            <button id="install-btn" class="icon-btn" style="display: none;" aria-label="Установить приложение">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="7 10 12 15 17 10"></polyline>
-                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                </svg>
-            </button>
+    <div id="screen-start" class="screen active">
+        <div class="logo-area">
+            <h1>AURA</h1>
+            <h2>ZORKI</h2>
         </div>
-        <p style="text-align: center; color: var(--gold-dim); font-size: 0.9em; margin-top: -10px;">
-            Система Визуального Декодирования
-        </p>
-    </header>
+        <button id="btn-start" class="circle-btn">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        </button>
+        <p class="subtitle">TAP TO OPEN THE EYE</p>
+    </div>
 
-    <main>
-        <div id="scanner-container">
-            <video id="camera-feed" autoplay playsinline muted></video>
-            
-            <canvas id="detection-canvas"></canvas>
-            
-            <div id="overlay-frame"></div>
-            
-            <div id="loading-indicator">Загрузка Зрения...</div>
+    <div id="screen-camera" class="screen">
+        <video id="camera-feed" autoplay playsinline muted></video>
+        <canvas id="detection-canvas"></canvas> <div class="camera-ui">
+            <div id="loading-msg">Загрузка нейросети...</div>
+            <button id="btn-snap" class="snap-btn" disabled></button>
         </div>
+        
+        <button id="btn-back-cam" class="icon-back">✕</button>
+    </div>
 
-        <button id="scan-btn" class="btn-gold" disabled>СКАНИРОВАТЬ</button>
-
-        <div id="result-area" class="tarot-card-display" style="display: none;">
-            <h2 id="card-name">...</h2>
-            <img id="card-image" src="" alt="Card Image">
-            <p id="card-short" class="meaning-short">...</p>
+    <div id="screen-result" class="screen">
+        <div class="result-container">
+            <div class="card-wrapper">
+                <img id="result-img" src="" alt="Captured Card">
+            </div>
+            
+            <div class="text-content">
+                <h2 id="result-title">Название</h2>
+                <div class="divider"></div>
+                <p id="result-desc">Описание...</p>
+                
+                <button id="btn-reset" class="btn-gold-outline">ИСКАТЬ ЕЩЁ</button>
+            </div>
         </div>
-    </main>
+    </div>
 
     <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('./sw.js')
-                .then(() => console.log('Service Worker Registered'))
-                .catch(err => console.log('SW Error:', err));
-        }
+        if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
     </script>
-
     <script type="module" src="app.js"></script>
-
 </body>
 </html>
