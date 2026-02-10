@@ -1,34 +1,229 @@
-/* Добавка в header */
-.header-content {
+/* =========================================
+   AURA ZORKI: PREMIUM BLACK GOLD THEME
+   ========================================= */
+
+/* 1. НАСТРОЙКИ И ШРИФТЫ */
+:root {
+    --bg-color: #050505;       /* Глубокий черный */
+    --card-bg: #121214;        /* Темный графит */
+    --text-main: #EAE6DF;      /* Слоновая кость */
+    --gold-accent: #D4AF37;    /* Классическое золото */
+    --gold-dark: #AA8C2C;      /* Темное золото */
+    --gold-glow: rgba(212, 175, 55, 0.3); /* Свечение */
+    
+    --font-header: 'Cinzel', serif;
+    --font-body: 'Cormorant Garamond', serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+/* 2. ОСНОВНОЙ КАРКАС (Центрирование всего) */
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    font-family: var(--font-body);
+    font-size: 18px;
+    line-height: 1.6;
+    
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+/* 3. ЗАГОЛОВОК */
+header {
+    text-align: center;
+    margin-bottom: 25px;
+    width: 100%;
+    max-width: 500px;
+    position: relative;
+}
+
+h1 {
+    font-family: var(--font-header);
+    color: var(--gold-accent);
+    font-size: 28px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-shadow: 0 0 10px var(--gold-glow);
+    margin-bottom: 5px;
+}
+
+/* 4. СКАНЕР (ОКНО КАМЕРЫ) */
+#scanner-container {
     position: relative;
     width: 100%;
+    max-width: 380px; /* Оптимально для телефона */
+    aspect-ratio: 9 / 16; /* Вертикальный формат */
+    background: #000;
+    border: 2px solid var(--gold-dark);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 0 30px var(--gold-glow);
+    margin-bottom: 25px;
 }
 
-/* Кнопка иконка */
-.icon-btn {
-    background: none;
-    border: none;
-    color: var(--gold-accent);
-    cursor: pointer;
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    padding: 10px;
-}
-
-.icon-btn:hover {
-    color: #fff;
-}
-
-#detection-canvas {
+/* Видео и Канвас должны идеально совпадать */
+#camera-feed, #detection-canvas {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 2;
+    object-fit: cover;
+}
+
+#detection-canvas {
+    z-index: 5; /* Поверх видео */
+}
+
+/* Декоративная рамка (прицел) */
+#overlay-frame {
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    width: 80%;
+    height: 80%;
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    border-radius: 8px;
+    z-index: 10;
+    box-shadow: 0 0 15px rgba(0,0,0,0.5) inset;
+    pointer-events: none; /* Чтобы можно было кликать сквозь него */
+}
+
+/* Уголки для прицела */
+#overlay-frame::before, #overlay-frame::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: var(--gold-accent);
+    border-style: solid;
+    transition: all 0.3s ease;
+}
+
+#overlay-frame::before {
+    top: -1px; left: -1px;
+    border-width: 3px 0 0 3px;
+}
+#overlay-frame::after {
+    bottom: -1px; right: -1px;
+    border-width: 0 3px 3px 0;
+}
+
+/* Индикатор загрузки */
+#loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: var(--gold-accent);
+    padding: 15px 25px;
+    border-radius: 8px;
+    border: 1px solid var(--gold-dark);
+    font-family: var(--font-header);
+    z-index: 20;
+    text-align: center;
+}
+
+/* 5. ГЛАВНАЯ КНОПКА */
+.btn-gold {
+    background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold-accent) 50%, var(--gold-dark) 100%);
+    color: #000;
+    border: none;
+    padding: 16px 40px;
+    font-family: var(--font-header);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: 2px;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 5px 20px rgba(212, 175, 55, 0.2);
+    transition: transform 0.2s, box-shadow 0.2s;
+    width: 100%;
+    max-width: 300px;
+}
+
+.btn-gold:active {
+    transform: scale(0.96);
+}
+
+.btn-gold:disabled {
+    background: #333;
+    color: #666;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* 6. КАРТОЧКА РЕЗУЛЬТАТА */
+.tarot-card-display {
+    background: var(--card-bg);
+    border: 1px solid var(--gold-dark);
+    border-radius: 12px;
+    padding: 25px;
+    margin-top: 30px;
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    
+    /* Анимация появления */
+    animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#card-name {
+    font-family: var(--font-header);
+    color: var(--gold-accent);
+    font-size: 24px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid var(--gold-dark);
+    padding-bottom: 10px;
+}
+
+#card-image {
+    width: 100%;
+    max-width: 220px;
+    border-radius: 8px;
+    border: 2px solid var(--gold-dark);
+    margin-bottom: 15px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+}
+
+.meaning-short {
+    font-style: italic;
+    font-size: 19px;
+    color: #ccc;
+    margin-top: 10px;
+}
+
+/* 7. КНОПКА УСТАНОВКИ (ИКОНКА) */
+.icon-btn {
+    background: transparent;
+    border: 1px solid var(--gold-dark);
+    border-radius: 50%;
+    color: var(--gold-accent);
+    cursor: pointer;
+    padding: 8px;
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    transition: all 0.3s;
+}
+
+.icon-btn:hover {
+    background: var(--gold-accent);
+    color: #000;
 }
