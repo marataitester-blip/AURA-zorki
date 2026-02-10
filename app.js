@@ -1,9 +1,9 @@
 import tarotDatabase from './tarot_db.js';
 
 // --- НАСТРОЙКИ ---
-const CONFIDENCE_THRESHOLD = 0.25; // 25% (Оптимально для телефона)
+const CONFIDENCE_THRESHOLD = 0.25; 
 const MODEL_PATH = './best.onnx';
-const INPUT_SIZE = 1280; 
+const INPUT_SIZE = 1280; // Размер, на котором училась модель
 
 // --- ЭЛЕМЕНТЫ ---
 const screens = {
@@ -62,20 +62,19 @@ btnSnap.addEventListener('click', async () => {
     btnSnap.style.transform = "scale(0.9)";
     setTimeout(() => btnSnap.style.transform = "scale(1)", 150);
 
-    // Подготовка
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = INPUT_SIZE;
     tempCanvas.height = INPUT_SIZE;
     const ctx = tempCanvas.getContext('2d');
     
-    // Кроп центра (Квадрат)
+    // Кроп центра
     const minDim = Math.min(video.videoWidth, video.videoHeight);
     const sx = (video.videoWidth - minDim) / 2;
     const sy = (video.videoHeight - minDim) / 2;
     ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, INPUT_SIZE, INPUT_SIZE);
 
     loadingMsg.style.display = 'block';
-    loadingMsg.innerText = "Изучаю...";
+    loadingMsg.innerText = "Смотрю...";
 
     setTimeout(async () => {
         try {
@@ -85,12 +84,11 @@ btnSnap.addEventListener('click', async () => {
             if (result && result.score > CONFIDENCE_THRESHOLD) {
                 showResult(result.id);
             } else {
-                // Если уверенность низкая, но что-то увидел
                 if (result) {
                     const cardName = getCardName(result.id);
-                    alert(`Не уверен. Это ${cardName}? (Вероятность: ${(result.score * 100).toFixed(0)}%)\nПопробуй навести резкость.`);
+                    alert(`Не уверен. Это ${cardName}? (${(result.score * 100).toFixed(0)}%)\nПопробуй навести резкость.`);
                 } else {
-                    alert("Ничего не вижу. Включи свет или подойди ближе.");
+                    alert("Ничего не вижу. Включи свет.");
                 }
             }
         } catch (e) {
@@ -105,15 +103,15 @@ function getCardName(id) {
     return c ? c.name : `ID ${id}`;
 }
 
-// --- 3. НЕЙРОСЕТЬ (ИСПРАВЛЕННАЯ ЦВЕТОПЕРЕДАЧА) ---
+// --- 3. НЕЙРОСЕТЬ ---
 async function runInference(ctx) {
     const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
-    const data = imageData.data; // RGBA массив
+    const data = imageData.data; 
     const float32Data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
     
     const size = INPUT_SIZE * INPUT_SIZE;
 
-    // !!! ВОТ ЗДЕСЬ БЫЛА ОШИБКА. ТЕПЕРЬ ПРАВИЛЬНО: R, G, B ПЛАНАРНО !!!
+    // R, G, B Планарно
     for (let i = 0; i < size; i++) {
         float32Data[i]          = data[i * 4]     / 255.0; // Red
         float32Data[i + size]   = data[i * 4 + 1] / 255.0; // Green
@@ -123,27 +121,32 @@ async function runInference(ctx) {
     const inputTensor = new ort.Tensor('float32', float32Data, [1, 3, INPUT_SIZE, INPUT_SIZE]);
 
     const results = await model.run({ images: inputTensor });
-    const output = results[Object.keys(results)[0]].data;
+    const output = results[Object.keys(results)[0]]; // Получаем объект тензора целиком
 
-    return parseYOLO_Final(output);
+    return parseYOLO_Adaptive(output);
 }
 
-// --- 4. ПАРСЕР (ПРОПУСКАЕМ ИМПЕРАТРИЦУ) ---
-function parseYOLO_Final(data) {
-    const numAnchors = 8400; 
-    const numClasses = 80;
+// 🔥 АДАПТИВНЫЙ ПАРСЕР (САМ ОПРЕДЕЛЯЕТ РАЗМЕР) 🔥
+function parseYOLO_Adaptive(tensor) {
+    const dims = tensor.dims; // Например [1, 84, 33600]
+    const data = tensor.data;
     
-    // Пропускаем первые 4 строки (Геометрию), чтобы не найти Императрицу случайно
-    // 4 строки * 8400 колонок
+    // Автоматически берем количество якорей из модели
+    const numAnchors = dims[2]; // Должно быть 33600
+    const numClasses = dims[1] - 4; // 84 - 4 = 80
+    
+    console.log(`Model Geometry: ${numAnchors} anchors, ${numClasses} classes`);
+
+    // Смещение: пропускаем 4 строки геометрии (4 * 33600)
     const geometryOffset = 4 * numAnchors;
     
-    let maxScore = -1;
+    let maxScore = 0;
     let bestClassId = -1;
 
     // Проходим по всем предсказаниям
     for (let i = 0; i < numAnchors; i++) {
         for (let c = 0; c < numClasses; c++) {
-            // Смещение геометрии + Смещение класса + Текущая колонка
+            // Смещение геометрии + (Номер класса * шаг) + текущая колонка
             const idx = geometryOffset + (c * numAnchors) + i;
             const score = data[idx];
 
