@@ -1,7 +1,7 @@
 import tarotDatabase from './tarot_db.js';
 
 // --- НАСТРОЙКИ ---
-const CONFIDENCE_THRESHOLD = 0.50; // 50% уверенности
+const CONFIDENCE_THRESHOLD = 0.40; // 40%
 const MODEL_PATH = './best.onnx';
 const INPUT_SIZE = 1280; 
 
@@ -18,7 +18,6 @@ const btnBack = document.getElementById('btn-back-cam');
 const btnReset = document.getElementById('btn-reset');
 const loadingMsg = document.getElementById('loading-msg');
 const video = document.getElementById('camera-feed');
-
 const resultImg = document.getElementById('result-img');
 const resultTitle = document.getElementById('result-title');
 const resultDesc = document.getElementById('result-desc');
@@ -26,30 +25,24 @@ const resultDesc = document.getElementById('result-desc');
 let model = null;
 let isModelReady = false;
 
-// --- 1. НАВИГАЦИЯ ---
+// --- 1. СТАРТ ---
 function showScreen(name) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[name].classList.add('active');
 }
 
-// --- 2. СТАРТ ---
 btnStart.addEventListener('click', async () => {
     showScreen('camera');
-    
-    // Камера
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         video.srcObject = stream;
-    } catch (e) {
-        alert("Нет доступа к камере. Проверь настройки браузера.");
-    }
+    } catch (e) { alert("Camera error"); }
 
-    // Модель
     if (!model) {
+        loadingMsg.innerText = "Греем Нейроны...";
         try {
-            loadingMsg.innerText = "Загрузка Зрения...";
             model = await ort.InferenceSession.create(MODEL_PATH, {
                 executionProviders: ['wasm'],
                 graphOptimizationLevel: 'all'
@@ -57,124 +50,114 @@ btnStart.addEventListener('click', async () => {
             isModelReady = true;
             loadingMsg.style.display = 'none';
             btnSnap.disabled = false;
-        } catch (e) {
-            loadingMsg.innerText = "Ошибка: best.onnx не найден или битый.";
-        }
+        } catch (e) { loadingMsg.innerText = "Ошибка модели"; }
     }
 });
 
-// --- 3. СЪЕМКА ---
+// --- 2. СНИМОК ---
 btnSnap.addEventListener('click', async () => {
     if (!isModelReady) return;
-
-    // Анимация кнопки
-    btnSnap.style.transform = "scale(0.8)";
+    btnSnap.style.transform = "scale(0.9)";
     setTimeout(() => btnSnap.style.transform = "scale(1)", 150);
 
-    // Подготовка
+    // Подготовка канваса
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = INPUT_SIZE;
     tempCanvas.height = INPUT_SIZE;
     const ctx = tempCanvas.getContext('2d');
-
-    // Кроп центра (чтобы не искажать пропорции)
+    
+    // Кроп центра
     const minDim = Math.min(video.videoWidth, video.videoHeight);
     const sx = (video.videoWidth - minDim) / 2;
     const sy = (video.videoHeight - minDim) / 2;
     ctx.drawImage(video, sx, sy, minDim, minDim, 0, 0, INPUT_SIZE, INPUT_SIZE);
 
-    // Анализ
     loadingMsg.style.display = 'block';
-    loadingMsg.innerText = "Анализ...";
+    loadingMsg.innerText = "Смотрю...";
 
-    try {
-        const detection = await runInference(ctx);
-        loadingMsg.style.display = 'none';
+    // Пауза чтобы UI обновился
+    setTimeout(async () => {
+        try {
+            const detection = await runInference(ctx);
+            loadingMsg.style.display = 'none';
 
-        if (detection) {
-            showResult(detection.id);
-        } else {
-            alert("Карта не найдена. Попробуй ближе или включи свет.");
+            if (detection) {
+                showResult(detection.id);
+            } else {
+                alert("Ничего не вижу. Попробуй светлее.");
+            }
+        } catch (e) {
+            console.error(e);
+            loadingMsg.style.display = 'none';
         }
-    } catch (e) {
-        console.error(e);
-        loadingMsg.style.display = 'none';
-    }
+    }, 50);
 });
 
-// --- 4. МОЗГИ (ИСПРАВЛЕННАЯ МАТЕМАТИКА) ---
+// --- 3. НЕЙРОСЕТЬ ---
 async function runInference(ctx) {
     const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
     const float32Data = new Float32Array(3 * INPUT_SIZE * INPUT_SIZE);
     
-    // HWC -> NCHW Normalization
-    for (let i = 0; i < float32Data.length / 3; i++) {
-        float32Data[i] = imageData.data[i * 4] / 255.0;                   // R
-        float32Data[i + INPUT_SIZE**2] = imageData.data[i * 4 + 1] / 255.0; // G
-        float32Data[i + 2 * INPUT_SIZE**2] = imageData.data[i * 4 + 2] / 255.0; // B
+    // Нормализация
+    for (let i = 0; i < float32Data.length; i++) {
+        float32Data[i] = imageData.data[i * 4] / 255.0; 
     }
     const inputTensor = new ort.Tensor('float32', float32Data, [1, 3, INPUT_SIZE, INPUT_SIZE]);
 
     const results = await model.run({ images: inputTensor });
-    const output = results[Object.keys(results)[0]].data; // Сырой массив
+    const output = results[Object.keys(results)[0]].data;
 
-    return parseYOLO_Correct(output);
+    return parseYOLO_Brutal(output);
 }
 
-// 🔥 ГЛАВНОЕ ИСПРАВЛЕНИЕ 🔥
-function parseYOLO_Correct(data) {
-    const numAnchors = 8400; // Количество колонок
-    const numClasses = 80;   // Количество классов
+// 🔥 ЖЕСТКИЙ ПАРСЕР (БЕЗ ГЕОМЕТРИИ) 🔥
+function parseYOLO_Brutal(data) {
+    const numAnchors = 8400; 
+    const numClasses = 80;
     
-    // Структура массива [1, 84, 8400]:
-    // Первые 8400 чисел = Center X
-    // Следующие 8400 = Center Y
-    // Следующие 8400 = Width
-    // Следующие 8400 = Height (ВОТ ОНА, ИМПЕРАТРИЦА!)
-    // Следующие 8400 = Class 0 Score
-    // ...
+    // СМЕЩЕНИЕ: Пропускаем первые 4 строки (4 * 8400 элементов)
+    // Это X, Y, W, H. Мы их просто игнорируем.
+    const startOffset = 4 * numAnchors;
     
     let maxScore = 0;
     let bestClassId = -1;
 
-    // Мы бежим по колонкам (Anchor 0 -> 8399)
+    // Проходим по всем "столбикам" (якорям)
     for (let i = 0; i < numAnchors; i++) {
         
-        let currentClassMax = 0;
-        let currentClassId = -1;
-
-        // Проверяем классы (начинаются со смещения 4 * 8400)
+        // Внутри каждого якоря ищем победивший класс
         for (let c = 0; c < numClasses; c++) {
-            // Формула доступа к ячейке:
-            // (Номер_Свойства * 8400) + Номер_Якоря
-            const propertyIndex = 4 + c; 
-            const value = data[propertyIndex * numAnchors + i];
+            
+            // Индекс = (Смещение_классов + Номер_класса) * Ширина + Текущий_якорь
+            // Но в плоском массиве [Batch, Channel, Anchor] это:
+            // (4 + c) * 8400 + i
+            
+            const idx = (4 + c) * numAnchors + i;
+            const score = data[idx];
 
-            if (value > currentClassMax) {
-                currentClassMax = value;
-                currentClassId = c;
+            if (score > maxScore) {
+                maxScore = score;
+                bestClassId = c;
             }
-        }
-
-        if (currentClassMax > maxScore) {
-            maxScore = currentClassMax;
-            bestClassId = currentClassId;
         }
     }
 
-    console.log(`ZORKI: Found Class ${bestClassId} with score ${maxScore}`);
+    console.log(`Max Score found: ${maxScore} for Class: ${bestClassId}`);
 
+    // Если "Императрица" (ID 3) имеет score > 1.0, значит мы все еще читаем геометрию.
+    // Но с этим кодом это невозможно.
+    
     if (maxScore > CONFIDENCE_THRESHOLD) {
         return { id: bestClassId, score: maxScore };
     }
     return null;
 }
 
-// --- 5. РЕЗУЛЬТАТ ---
+// --- 4. ПОКАЗАТЬ РЕЗУЛЬТАТ ---
 function showResult(id) {
     const card = tarotDatabase.find(c => c.id === id);
     if (card) {
-        // Добавляем префикс cards/ если его нет
+        // Если image путь не содержит слэш, добавляем папку
         const imgPath = card.img.includes('/') ? card.img : `./cards/${card.img}`;
         
         resultImg.src = imgPath;
@@ -184,9 +167,5 @@ function showResult(id) {
     }
 }
 
-// Кнопки Назад
 btnBack.addEventListener('click', () => showScreen('start'));
-btnReset.addEventListener('click', () => {
-    showScreen('camera');
-    resultTitle.innerText = "...";
-});
+btnReset.addEventListener('click', () => showScreen('camera'));
